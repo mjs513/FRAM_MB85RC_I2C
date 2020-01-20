@@ -112,7 +112,7 @@
 #define HIGH_SPEED	0x08 //Cypress codes, not used here
 
 // Managing Write protect pin
-#define MANAGE_WP true //false if WP pin remains not connected
+#define MANAGE_WP false //false if WP pin remains not connected
 #define DEFAULT_WP_PIN	13 //write protection pin - active high, write enabled when low
 #define DEFAULT_WP_STATUS  false //false means protection is off - write is enabled
 
@@ -133,10 +133,10 @@
 
 class FRAM_MB85RC_I2C {
  public:
-	FRAM_MB85RC_I2C(void);
-	FRAM_MB85RC_I2C(uint8_t address, boolean wp);
-	FRAM_MB85RC_I2C(uint8_t address, boolean wp, int pin);
-	FRAM_MB85RC_I2C(uint8_t address, boolean wp, int pin, uint16_t chipDensity);
+	FRAM_MB85RC_I2C(TwoWire *theWire = &Wire);
+	FRAM_MB85RC_I2C(uint8_t address, boolean wp, TwoWire *theWire = &Wire);
+	FRAM_MB85RC_I2C(uint8_t address, boolean wp, int pin, TwoWire *theWire = &Wire);
+	FRAM_MB85RC_I2C(uint8_t address, boolean wp, int pin, uint16_t chipDensity, TwoWire *theWire = &Wire);
 	
 	void	begin(void);
 	byte	checkDevice(void);
@@ -161,6 +161,7 @@ class FRAM_MB85RC_I2C {
 	byte	eraseDevice(void);
   
  private:
+    TwoWire *_wire;
 	uint8_t	i2c_addr;
 	boolean	_framInitialised;
 	boolean	_manualMode;
