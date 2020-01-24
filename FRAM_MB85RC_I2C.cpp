@@ -168,15 +168,45 @@ byte FRAM_MB85RC_I2C::checkDevice(void)
 */
 /**************************************************************************/
 byte FRAM_MB85RC_I2C::writeArray (uint16_t framAddr, byte items, uint8_t values[])
-{
+{	
 	if ((framAddr >= maxaddress) || ((framAddr + (uint16_t) items - 1) >= maxaddress)) return ERROR_11;
 	
-	
+	/*
 	FRAM_MB85RC_I2C::I2CAddressAdapt(framAddr);
 	for (byte i=0; i < items ; i++) {
 		_wire ->write(values[i]);
 	}
-	return _wire ->endTransmission();
+	return _wire ->endTransmission(); */
+	
+	uint8_t error;
+	uint16_t bytes_remaining = items % i2c_buffer_length;
+	uint16_t packets2send = (items -  bytes_remaining)/i2c_buffer_length;
+	uint16_t byteCnt = 0;
+	
+	//Serial.printf("BufferLe: %d, items: %d, remaining: %d, 2send: %d\n", i2c_buffer_length, items, bytes_remaining, packets2send);
+
+	if(packets2send > 0){
+		for(int j = 0; j < packets2send; j++){
+			FRAM_MB85RC_I2C::I2CAddressAdapt(framAddr + byteCnt);
+			for (int i=0; i < i2c_buffer_length ; i++) {
+				//Serial.printf("0x%x: Packet: %d, i: %d, index: %d, value: %d\n",framAddr+i, j, i, i+(j*i2c_buffer_length),values[i+(j*i2c_buffer_length)]); 
+				_wire ->write(values[i+(j*i2c_buffer_length)]);
+				byteCnt = byteCnt + 1;
+			}
+			error = _wire ->endTransmission();
+			if(error > 0) return error;
+		}
+	}
+	
+	//Serial.println("\nRemaining Bytes Write to FRAM");
+	FRAM_MB85RC_I2C::I2CAddressAdapt(framAddr +  byteCnt);
+	for (int j=0; j < bytes_remaining; j++) {
+		//Serial.printf("0x%x: j: %d, index: %d, value: %d\n",framAddr +  byteCnt+j, j, j+packets2send*i2c_buffer_length,values[j+packets2send*i2c_buffer_length]); 
+		_wire ->write(values[j+packets2send*i2c_buffer_length]);
+	}
+	error = _wire ->endTransmission();
+	
+	return error;
 }
 
 /**************************************************************************/
@@ -221,7 +251,7 @@ byte FRAM_MB85RC_I2C::writeByte (uint16_t framAddr, uint8_t value)
 byte FRAM_MB85RC_I2C::readArray (uint16_t framAddr, byte items, uint8_t values[])
 {
 	if ((framAddr >= maxaddress) || ((framAddr + (uint16_t) items - 1) >= maxaddress)) return ERROR_11;
-	
+/*
 	byte result;
 	if (items == 0) {
 		result = ERROR_8; //number of bytes asked to read null
@@ -236,6 +266,50 @@ byte FRAM_MB85RC_I2C::readArray (uint16_t framAddr, byte items, uint8_t values[]
 		}
 	}
 	return result;
+*/
+
+	uint16_t dataSpot = 0; //Start at the beginning of shtpData array
+
+	byte result;
+	if (items == 0) {
+		result = ERROR_8; //number of bytes asked to read null
+		return result;
+	}
+
+	uint16_t packetCnt = 0;
+	uint16_t bytesRemaining = items;
+	//Setup a series of chunked 32 byte reads
+	while (bytesRemaining > 0)
+	{
+		uint16_t numberOfBytesToRead = bytesRemaining;
+		if (numberOfBytesToRead > i2c_buffer_length)
+			numberOfBytesToRead = i2c_buffer_length;
+
+		FRAM_MB85RC_I2C::I2CAddressAdapt(framAddr+packetCnt*i2c_buffer_length);
+		result = _wire ->endTransmission();
+		
+		_wire ->requestFrom(i2c_addr, numberOfBytesToRead);
+
+		for (uint8_t x = 0; x < numberOfBytesToRead; x++)
+		{
+			uint8_t incoming = _wire->read();
+			if (dataSpot < items)
+			{
+				values[dataSpot++] = incoming; //Store data into the shtpData array
+			}
+			else
+			{
+				//Do nothing with the data
+			}
+		}
+
+		bytesRemaining -= numberOfBytesToRead;
+		packetCnt = packetCnt + 1;
+	}
+	return 0; //Done!
+
+
+
 }
 
 /**************************************************************************/
@@ -914,6 +988,8 @@ void FRAM_MB85RC_I2C::I2CAddressAdapt(uint16_t framAddr) {
 	#if defined(SERIAL_DEBUG) && (SERIAL_DEBUG == 1)
 		Serial.print("Calculated address 0x");
 		Serial.println(chipaddress, HEX);
+		Serial.print("Density: ");
+		Serial.println(density);
 	#endif
 	
 	if (density < 64) {
@@ -921,6 +997,9 @@ void FRAM_MB85RC_I2C::I2CAddressAdapt(uint16_t framAddr) {
 		_wire ->write(framAddr & 0xFF);
 	}
 	else {
+		#if defined(SERIAL_DEBUG) && (SERIAL_DEBUG == 1)
+			Serial.printf("i2c_addr: 0x%x, framAddr >> 8: 0x%x,  framAddr & 0xFF: 0x%x\n", framAddr, framAddr >> 8,  framAddr & 0xFF);
+		#endif
 		_wire ->beginTransmission(i2c_addr);
 		_wire ->write(framAddr >> 8);
 		_wire ->write(framAddr & 0xFF);	
