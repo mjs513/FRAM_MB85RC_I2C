@@ -64,7 +64,7 @@
 //#define SERIAL_DEBUG 1
 #endif
 
-#define i2c_buffer_length 32
+#define i2c_buffer_length 30
 
 // IDs
 //Manufacturers codes
